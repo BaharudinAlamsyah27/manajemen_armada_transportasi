@@ -1,0 +1,13 @@
+<?php
+namespace App\Http\Controllers;
+
+use App\Models\Karyawan;
+use Illuminate\Http\Request;
+
+class KaryawanController extends Controller
+{
+    public function index() {
+        $karyawans = Karyawan::with('cabang')->get();
+        return view('karyawan.index', compact('karyawans'));
+    }
+}
