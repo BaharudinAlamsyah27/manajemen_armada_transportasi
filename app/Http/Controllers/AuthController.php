@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -14,17 +15,29 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'username' => ['required'],
-            'password' => ['required'],
+            'username' => ['required', 'string'],
+            'password' => ['required', 'string'],
         ]);
 
-        if (Auth::attempt($credentials)) {
-            $request->session()->regenerate();
-            return redirect()->intended('dashboard');
-        }
+        $attempted = Auth::attempt([
+            'username' => $credentials['username'],
+            'password' => $credentials['password'],
+        ]) || Auth::attempt([
+            'email' => $credentials['username'],
+            'password' => $credentials['password'],
+        ]);
 
-        // Coba pakai email
-        if (Auth::attempt(['email' => $credentials['username'], 'password' => $credentials['password']])) {
+        if ($attempted) {
+            $user = Auth::user();
+            if (!$user->aktif || ($user->karyawan && !$user->karyawan->aktif)) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+                return back()->withErrors([
+                    'username' => 'Akun Anda sedang dinonaktifkan.',
+                ]);
+            }
+
             $request->session()->regenerate();
             return redirect()->intended('dashboard');
         }

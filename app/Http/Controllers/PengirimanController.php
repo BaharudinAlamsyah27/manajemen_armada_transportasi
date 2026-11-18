@@ -2,60 +2,85 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Karyawan;
+use App\Models\Kendaraan;
 use App\Models\Pengiriman;
+use App\Models\Pesanan;
 use App\Services\PengirimanService;
+use Exception;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 
 class PengirimanController extends Controller
 {
-    /**
-     * List semua manifest (pengiriman) untuk cabang pengguna.
-     */
     public function index()
     {
-        $cabangId = Auth::user()->cabang_id;
-        $pengirimans = Pengiriman::where('cabang_id', $cabangId)->with(['kendaraan', 'sopir', 'pesanans'])->get();
+        $pengirimans = Pengiriman::with(['cabang', 'kendaraan', 'sopir', 'pesanans'])->latest()->get();
         return view('pengiriman.index', compact('pengirimans'));
     }
 
-    /**
-     * Show form untuk membuat manifest baru.
-     */
     public function create()
     {
-        // Data kendaraan tersedia dan status "tersedia"
-        $kendaraans = Auth::user()->cabang->kendaraans()->where('status', 'tersedia')->get();
-        $sopirs = Auth::user()->cabang->sopirs()->get();
-        $pesanans = Auth::user()->cabang->pesanans()->where('status', 'menunggu_jadwal')->get();
+        $kendaraans = Kendaraan::where('status', 'tersedia')->orderBy('kode')->get();
+        $sopirs = Karyawan::where('jabatan', 'sopir')->where('aktif', true)->orderBy('nama')->get();
+        $pesanans = Pesanan::where('status', 'menunggu_jadwal')->orderBy('id')->get();
         return view('pengiriman.create', compact('kendaraans', 'sopirs', 'pesanans'));
     }
 
-    /**
-     * Store manifest baru.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'tanggal_rencana' => 'required|date',
             'kendaraan_id' => 'required|exists:kendaraans,id',
-            'sopir_id'     => 'required|exists:sopirs,id',
-            'pesanan_ids'  => 'required|array|min:1',
+            'sopir_id' => 'required|exists:karyawans,id',
+            'tujuan_ringkas' => 'nullable|string|max:150',
+            'pesanan_ids' => 'required|array|min:1',
+            'pesanan_ids.*' => 'exists:pesanans,id',
+            'catatan' => 'nullable|string',
+            'override_alasan' => 'nullable|string',
         ]);
 
-        $service = new PengirimanService();
-        $pengiriman = $service->createManifest($validated, $validated['pesanan_ids']);
-
-        return redirect()->route('pengiriman.show', $pengiriman->id)
-                         ->with('success', 'Manifest berhasil dibuat.');
+        try {
+            $service = new PengirimanService();
+            $pengiriman = $service->createManifest($validated, $validated['pesanan_ids']);
+            return redirect()->route('pengiriman.show', $pengiriman)->with('success', "Manifest {$pengiriman->kode} berhasil dijadwalkan.");
+        } catch (Exception $e) {
+            return back()->withInput()->withErrors(['manifest' => $e->getMessage()]);
+        }
     }
 
-    /**
-     * Tampilkan detail manifest.
-     */
     public function show(Pengiriman $pengiriman)
     {
-        $this->authorize('view', $pengiriman);
-        $pengiriman->load(['kendaraan', 'sopir', 'pesanans']);
+        $pengiriman->load(['cabang', 'kendaraan', 'sopir', 'pesanans']);
         return view('pengiriman.show', compact('pengiriman'));
+    }
+
+    public function mulai(Request $request, Pengiriman $pengiriman)
+    {
+        $validated = $request->validate([
+            'odometer_awal' => 'required|integer|min:0',
+        ]);
+
+        try {
+            $service = new PengirimanService();
+            $service->mulaiPerjalanan($pengiriman, (int) $validated['odometer_awal']);
+            return redirect()->route('pengiriman.show', $pengiriman)->with('success', 'Pengiriman berhasil diberangkatkan.');
+        } catch (Exception $e) {
+            return back()->withErrors(['aksi' => $e->getMessage()]);
+        }
+    }
+
+    public function selesai(Request $request, Pengiriman $pengiriman)
+    {
+        $validated = $request->validate([
+            'odometer_akhir' => 'required|integer|min:0',
+        ]);
+
+        try {
+            $service = new PengirimanService();
+            $service->selesaiPerjalanan($pengiriman, (int) $validated['odometer_akhir']);
+            return redirect()->route('pengiriman.show', $pengiriman)->with('success', 'Pengiriman telah diselesaikan.');
+        } catch (Exception $e) {
+            return back()->withErrors(['aksi' => $e->getMessage()]);
+        }
     }
 }
