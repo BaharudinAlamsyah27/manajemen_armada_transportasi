@@ -84,6 +84,10 @@ class ExampleTest extends TestCase
         $this->assertEquals('bertugas', $kendaraan->fresh()->status);
         $this->assertEquals('dalam_perjalanan', $pesanan->fresh()->status);
 
+        // Tandai pesanan terkirim (input manual admin dengan catatan)
+        $pengirimanService->tandaiTerkirim($pesanan->fresh(), 'Budi', null, 'Diterima di gudang', 'admin');
+        $this->assertEquals('terkirim', $pesanan->fresh()->status);
+
         // Selesai perjalanan
         $pengirimanService->selesaiPerjalanan($manifest->fresh(), 250);
         $this->assertEquals('selesai', $manifest->fresh()->status);

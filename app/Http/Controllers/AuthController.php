@@ -39,7 +39,12 @@ class AuthController extends Controller
             }
 
             $request->session()->regenerate();
-            return redirect()->intended('dashboard');
+
+            if ($user->hasRole('sopir')) {
+                return redirect()->intended(route('portal.beranda'));
+            }
+
+            return redirect()->intended(route('dashboard'));
         }
 
         return back()->withErrors([

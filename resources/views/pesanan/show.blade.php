@@ -23,20 +23,34 @@
     </div>
 </div>
 
-@if(!in_array($pesanan->status, ['terkirim', 'dibatalkan']))
+@if(!empty($transisi))
 <div class="table-container" style="padding:1rem; margin-bottom:1.5rem;">
     <h3 style="margin-bottom:0.75rem;">Ubah Status Pesanan</h3>
     <form action="{{ route('pesanan.status', $pesanan) }}" method="POST" style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
         @csrf
         <select name="status_baru" class="form-input" style="max-width:220px;" required>
-            <option value="menunggu_jadwal">Menunggu Jadwal</option>
-            <option value="terkirim">Terkirim</option>
-            <option value="gagal_kirim">Gagal Kirim</option>
-            <option value="dibatalkan">Dibatalkan</option>
+            @foreach($transisi as $st)
+                <option value="{{ $st }}">{{ ucfirst(str_replace('_', ' ', $st)) }}</option>
+            @endforeach
         </select>
-        <input type="text" name="catatan" class="form-input" placeholder="Catatan / alasan / nama penerima..." style="max-width:350px;">
-        <button type="submit" class="btn btn-sm">Perbarui Status</button>
+        <input type="text" name="catatan" class="form-input" placeholder="Catatan / alasan..." style="max-width:350px;">
+        <button type="submit" class="btn btn-sm" style="width:auto;">Perbarui Status</button>
     </form>
+</div>
+@endif
+
+@if($pesanan->buktiPengirimans->isNotEmpty())
+<div class="table-container" style="padding:1rem; margin-bottom:1.5rem;">
+    <h3 style="margin-bottom:0.75rem;">Bukti Pengiriman (POD)</h3>
+    @foreach($pesanan->buktiPengirimans as $bukti)
+        <div style="margin-bottom:0.5rem;">
+            <strong>{{ $bukti->nama_penerima }}</strong> — {{ $bukti->waktu?->format('d/m/Y H:i') }}
+            @if($bukti->catatan) ({{ $bukti->catatan }}) @endif
+            @if($bukti->path)
+                · <a href="{{ route('berkas.bukti', $bukti) }}" target="_blank" style="color:var(--primary);">Lihat Foto Bukti</a>
+            @endif
+        </div>
+    @endforeach
 </div>
 @endif
 

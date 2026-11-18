@@ -5,14 +5,18 @@ namespace App\Services;
 use App\Enums\StatusKendaraan;
 use App\Enums\StatusPengiriman;
 use App\Enums\StatusPesanan;
+use App\Models\BuktiPengiriman;
 use App\Models\Karyawan;
 use App\Models\Kendaraan;
 use App\Models\Pengiriman;
 use App\Models\Pesanan;
+use App\Models\Setting;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class PengirimanService
 {
@@ -57,9 +61,54 @@ class PengirimanService
                 if ($sopir->sim_berlaku_sampai && $sopir->sim_berlaku_sampai->lt($tanggalRencana)) {
                     $errors[] = 'SIM sopir sudah kedaluwarsa.';
                 }
+                // Kesesuaian SIM (A8): motor -> C; pickup/box -> B1/B2; truk -> B2.
+                $simCocok = match ($kendaraan->jenis) {
+                    'motor' => $sopir->jenis_sim === 'C',
+                    'pickup', 'box' => in_array($sopir->jenis_sim, ['B1', 'B2'], true),
+                    'truk' => $sopir->jenis_sim === 'B2',
+                    default => true,
+                };
+                if (!$simCocok) {
+                    $errors[] = "Jenis SIM sopir ({$sopir->jenis_sim}) tidak sesuai untuk kendaraan {$kendaraan->jenis}.";
+                }
                 if (!empty($errors)) {
                     throw new Exception('Dokumen tidak laik jalan: ' . implode(' ', $errors));
                 }
+            }
+
+            // Cek tumpang tindih jendela waktu multi-rit + jeda antar rit (A5)
+            $waktuMulai = isset($data['waktu_mulai_rencana']) ? Carbon::parse($data['waktu_mulai_rencana']) : now();
+            $estimasiTiba = isset($data['estimasi_tiba']) ? Carbon::parse($data['estimasi_tiba']) : $waktuMulai->copy()->addHours(4);
+            $jedaMenit = (int) Setting::getValue('jeda_antar_rit_menit', 30);
+
+            $bentrokKendaraan = Pengiriman::where('kendaraan_id', $kendaraan->id)
+                ->whereIn('status', [StatusPengiriman::TERJADWAL->value, StatusPengiriman::BERJALAN->value])
+                ->whereNotNull('waktu_mulai_rencana')
+                ->whereNotNull('estimasi_tiba')
+                ->get()
+                ->first(function (Pengiriman $p) use ($waktuMulai, $estimasiTiba, $jedaMenit) {
+                    $mulaiLain = $p->waktu_mulai_rencana->copy()->subMinutes($jedaMenit);
+                    $selesaiLain = $p->estimasi_tiba->copy()->addMinutes($jedaMenit);
+                    return $waktuMulai->lt($selesaiLain) && $estimasiTiba->gt($mulaiLain);
+                });
+
+            if ($bentrokKendaraan) {
+                throw new Exception("Jadwal kendaraan bentrok dengan pengiriman {$bentrokKendaraan->kode} (termasuk jeda {$jedaMenit} menit).");
+            }
+
+            $bentrokSopir = Pengiriman::where('sopir_id', $sopir->id)
+                ->whereIn('status', [StatusPengiriman::TERJADWAL->value, StatusPengiriman::BERJALAN->value])
+                ->whereNotNull('waktu_mulai_rencana')
+                ->whereNotNull('estimasi_tiba')
+                ->get()
+                ->first(function (Pengiriman $p) use ($waktuMulai, $estimasiTiba, $jedaMenit) {
+                    $mulaiLain = $p->waktu_mulai_rencana->copy()->subMinutes($jedaMenit);
+                    $selesaiLain = $p->estimasi_tiba->copy()->addMinutes($jedaMenit);
+                    return $waktuMulai->lt($selesaiLain) && $estimasiTiba->gt($mulaiLain);
+                });
+
+            if ($bentrokSopir) {
+                throw new Exception("Jadwal sopir bentrok dengan pengiriman {$bentrokSopir->kode} (termasuk jeda {$jedaMenit} menit).");
             }
 
             $pesanans = Pesanan::whereIn('id', $pesananIds)
@@ -92,8 +141,8 @@ class PengirimanService
                 'sopir_id' => $sopir->id,
                 'kernet_id' => $data['kernet_id'] ?? null,
                 'tujuan_ringkas' => $data['tujuan_ringkas'] ?? $pesanans->pluck('kota_tujuan')->unique()->implode(', '),
-                'waktu_mulai_rencana' => $data['waktu_mulai_rencana'] ?? now(),
-                'estimasi_tiba' => $data['estimasi_tiba'] ?? now()->addHours(4),
+                'waktu_mulai_rencana' => $waktuMulai,
+                'estimasi_tiba' => $estimasiTiba,
                 'rit_ke' => $ritKe,
                 'status' => StatusPengiriman::TERJADWAL->value,
                 'catatan' => $data['catatan'] ?? null,
@@ -115,14 +164,15 @@ class PengirimanService
         });
     }
 
-    public function mulaiPerjalanan(Pengiriman $pengiriman, int $odometerAwal): Pengiriman
+    public function mulaiPerjalanan(Pengiriman $pengiriman, int $odometerAwal, string $sumber = 'admin'): Pengiriman
     {
-        return DB::transaction(function () use ($pengiriman, $odometerAwal) {
+        return DB::transaction(function () use ($pengiriman, $odometerAwal, $sumber) {
+            $pengiriman = Pengiriman::withoutGlobalScopes()->lockForUpdate()->findOrFail($pengiriman->id);
             if ($pengiriman->status !== StatusPengiriman::TERJADWAL->value) {
                 throw new Exception('Hanya pengiriman berstatus terjadwal yang dapat dimulai.');
             }
 
-            $kendaraan = Kendaraan::lockForUpdate()->findOrFail($pengiriman->kendaraan_id);
+            $kendaraan = Kendaraan::withoutGlobalScopes()->lockForUpdate()->findOrFail($pengiriman->kendaraan_id);
             if ($odometerAwal < $kendaraan->odometer_terakhir) {
                 throw new Exception("Odometer awal ({$odometerAwal} km) tidak boleh lebih kecil dari odometer terakhir kendaraan ({$kendaraan->odometer_terakhir} km).");
             }
@@ -141,7 +191,8 @@ class PengirimanService
                     $pesananService->updateStatus(
                         $pesanan,
                         StatusPesanan::DALAM_PERJALANAN->value,
-                        "Pengiriman {$pengiriman->kode} mulai berjalan."
+                        "Pengiriman {$pengiriman->kode} mulai berjalan.",
+                        $sumber
                     );
                 }
             }
@@ -150,9 +201,91 @@ class PengirimanService
         });
     }
 
-    public function selesaiPerjalanan(Pengiriman $pengiriman, int $odometerAkhir): Pengiriman
+    /**
+     * Tandai satu pesanan terkirim. Sopir wajib foto (A19); admin boleh tanpa foto dengan catatan.
+     */
+    public function tandaiTerkirim(
+        Pesanan $pesanan,
+        string $namaPenerima,
+        ?UploadedFile $foto = null,
+        ?string $catatan = null,
+        string $sumber = 'admin'
+    ): Pesanan {
+        if (trim($namaPenerima) === '') {
+            throw new Exception('Nama penerima aktual wajib diisi.');
+        }
+        if ($sumber === 'sopir' && !$foto) {
+            throw new Exception('Foto bukti pengiriman wajib diunggah.');
+        }
+        if ($sumber !== 'sopir' && !$foto && empty($catatan)) {
+            throw new Exception('Input manual tanpa foto wajib disertai catatan.');
+        }
+
+        // Simpan berkas di luar transaksi; bila transaksi gagal, berkas dihapus lagi.
+        $path = $foto ? $foto->store('bukti-pengiriman', 'local') : null;
+
+        try {
+            return DB::transaction(function () use ($pesanan, $namaPenerima, $foto, $path, $catatan, $sumber) {
+                $pesanan = Pesanan::withoutGlobalScopes()->lockForUpdate()->findOrFail($pesanan->id);
+                $pengiriman = $pesanan->pengiriman;
+
+                if (!$pengiriman || $pengiriman->status !== StatusPengiriman::BERJALAN->value) {
+                    throw new Exception('Pesanan hanya dapat ditandai terkirim saat pengirimannya sedang berjalan.');
+                }
+                if ($pesanan->status !== StatusPesanan::DALAM_PERJALANAN->value) {
+                    throw new Exception('Pesanan ini tidak sedang dalam perjalanan (mungkin sudah diproses).');
+                }
+
+                BuktiPengiriman::create([
+                    'pesanan_id' => $pesanan->id,
+                    'pengiriman_id' => $pengiriman->id,
+                    'jenis' => $foto ? 'foto' : 'manual',
+                    'path' => $path,
+                    'nama_penerima' => $namaPenerima,
+                    'catatan' => $catatan,
+                    'diambil_oleh' => Auth::id(),
+                    'waktu' => now(),
+                    'ukuran' => $foto?->getSize(),
+                    'mime' => $foto?->getMimeType(),
+                ]);
+
+                (new PesananService())->updateStatus(
+                    $pesanan,
+                    StatusPesanan::TERKIRIM->value,
+                    'Diterima oleh ' . $namaPenerima . ($catatan ? " — {$catatan}" : ''),
+                    $sumber
+                );
+
+                return $pesanan;
+            });
+        } catch (\Throwable $e) {
+            if ($path) {
+                Storage::disk('local')->delete($path);
+            }
+            throw $e;
+        }
+    }
+
+    public function tandaiGagal(Pesanan $pesanan, string $alasan, string $sumber = 'admin'): Pesanan
+    {
+        return DB::transaction(function () use ($pesanan, $alasan, $sumber) {
+            $pesanan = Pesanan::withoutGlobalScopes()->lockForUpdate()->findOrFail($pesanan->id);
+            $pengiriman = $pesanan->pengiriman;
+
+            if (!$pengiriman || $pengiriman->status !== StatusPengiriman::BERJALAN->value) {
+                throw new Exception('Pesanan hanya dapat ditandai gagal saat pengirimannya sedang berjalan.');
+            }
+
+            (new PesananService())->updateStatus($pesanan, StatusPesanan::GAGAL_KIRIM->value, $alasan, $sumber);
+
+            return $pesanan;
+        });
+    }
+
+    public function selesaiPerjalanan(Pengiriman $pengiriman, int $odometerAkhir, string $sumber = 'admin'): Pengiriman
     {
         return DB::transaction(function () use ($pengiriman, $odometerAkhir) {
+            $pengiriman = Pengiriman::withoutGlobalScopes()->lockForUpdate()->findOrFail($pengiriman->id);
             if ($pengiriman->status !== StatusPengiriman::BERJALAN->value) {
                 throw new Exception('Hanya pengiriman yang sedang berjalan yang dapat diselesaikan.');
             }
@@ -161,15 +294,16 @@ class PengirimanService
                 throw new Exception("Odometer akhir ({$odometerAkhir} km) tidak boleh lebih kecil dari odometer awal ({$pengiriman->odometer_awal} km).");
             }
 
-            $pesananService = new PesananService();
+            // Pedoman 6.3: semua pesanan harus sudah final (terkirim / gagal_kirim).
+            $belumFinal = $pengiriman->pesanans
+                ->whereNotIn('status', [StatusPesanan::TERKIRIM->value, StatusPesanan::GAGAL_KIRIM->value]);
+            if ($belumFinal->isNotEmpty()) {
+                throw new Exception('Masih ada ' . $belumFinal->count() . ' pesanan yang belum ditandai terkirim/gagal: ' . $belumFinal->pluck('kode_resi')->implode(', ') . '.');
+            }
+
+            // Pesanan gagal dilepas agar bisa dijadwalkan ulang.
             foreach ($pengiriman->pesanans as $pesanan) {
-                if ($pesanan->status === StatusPesanan::DALAM_PERJALANAN->value) {
-                    $pesananService->updateStatus(
-                        $pesanan,
-                        StatusPesanan::TERKIRIM->value,
-                        "Pengiriman {$pengiriman->kode} selesai."
-                    );
-                } elseif ($pesanan->status === StatusPesanan::GAGAL_KIRIM->value) {
+                if ($pesanan->status === StatusPesanan::GAGAL_KIRIM->value) {
                     $pesanan->update(['pengiriman_id' => null]);
                 }
             }
@@ -180,10 +314,40 @@ class PengirimanService
                 'waktu_tiba' => now(),
             ]);
 
-            $kendaraan = Kendaraan::lockForUpdate()->findOrFail($pengiriman->kendaraan_id);
+            $kendaraan = Kendaraan::withoutGlobalScopes()->lockForUpdate()->findOrFail($pengiriman->kendaraan_id);
             $kendaraan->update([
                 'status' => StatusKendaraan::TERSEDIA->value,
                 'odometer_terakhir' => $odometerAkhir,
+            ]);
+
+            return $pengiriman;
+        });
+    }
+
+    public function batal(Pengiriman $pengiriman, string $alasan): Pengiriman
+    {
+        if (trim($alasan) === '') {
+            throw new Exception('Alasan pembatalan wajib diisi.');
+        }
+
+        return DB::transaction(function () use ($pengiriman, $alasan) {
+            $pengiriman = Pengiriman::withoutGlobalScopes()->lockForUpdate()->findOrFail($pengiriman->id);
+            if ($pengiriman->status !== StatusPengiriman::TERJADWAL->value) {
+                throw new Exception('Hanya pengiriman berstatus terjadwal yang dapat dibatalkan.');
+            }
+
+            $pesananService = new PesananService();
+            foreach ($pengiriman->pesanans as $pesanan) {
+                $pesananService->updateStatus(
+                    $pesanan,
+                    StatusPesanan::MENUNGGU_JADWAL->value,
+                    "Pengiriman {$pengiriman->kode} dibatalkan: {$alasan}"
+                );
+            }
+
+            $pengiriman->update([
+                'status' => StatusPengiriman::BATAL->value,
+                'catatan' => trim(($pengiriman->catatan ? $pengiriman->catatan . "\n" : '') . "Dibatalkan: {$alasan}"),
             ]);
 
             return $pengiriman;

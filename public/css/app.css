@@ -49,3 +49,35 @@ tr:hover { background: #F9FAFB; }
 .badge.inactive { background: #FEE2E2; color: #991B1B; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
 .btn-sm { padding: 0.5rem 1rem; font-size: 0.875rem; }
+/* ===== Portal Sopir (mobile-first) ===== */
+.portal-body { background: var(--bg); padding-bottom: 76px; }
+.portal-top { background: var(--primary); color: #fff; padding: 0.9rem 1rem; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; }
+.portal-top button { background: none; border: 1px solid rgba(255,255,255,0.6); color: #fff; border-radius: 0.5rem; padding: 0.4rem 0.75rem; cursor: pointer; }
+.portal-main { max-width: 640px; margin: 0 auto; padding: 1rem; }
+.portal-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 10; }
+.portal-nav a { flex: 1; text-align: center; padding: 0.9rem 0.25rem; min-height: 56px; color: var(--text-light); text-decoration: none; font-size: 0.8rem; font-weight: 600; }
+.portal-nav a.aktif { color: var(--primary); border-top: 3px solid var(--primary); }
+.kartu { background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; }
+.kartu h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+.kartu-link { display: block; color: inherit; text-decoration: none; }
+.btn-besar { display: block; width: 100%; min-height: 48px; padding: 0.85rem; font-size: 1rem; font-weight: 700; border-radius: 0.6rem; border: none; cursor: pointer; text-align: center; text-decoration: none; margin-bottom: 0.6rem; }
+.btn-hijau { background: #16A34A; color: #fff; }
+.btn-merah { background: #DC2626; color: #fff; }
+.btn-biru { background: var(--primary); color: #fff; }
+.btn-abu { background: #E5E7EB; color: var(--text); }
+.btn-besar:disabled { opacity: 0.6; cursor: wait; }
+.peringatan { background: #FEF3C7; color: #92400E; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; }
+.notif-sukses { background: #DCFCE7; color: #166534; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; }
+.notif-gagal { background: #FEE2E2; color: #991B1B; padding: 0.75rem; border-radius: 0.5rem; margin-bottom: 1rem; }
+.baris-aksi { display: flex; gap: 0.5rem; }
+.baris-aksi > * { flex: 1; }
+details.aksi summary { cursor: pointer; font-weight: 700; padding: 0.6rem 0; }
+
+/* Admin responsif dasar */
+@media (max-width: 768px) {
+    .app-container { flex-direction: column; }
+    .sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+    .sidebar-nav { display: flex; flex-wrap: wrap; padding: 0.5rem; }
+    .nav-item { padding: 0.5rem 0.75rem; }
+    th, td { padding: 0.6rem 0.75rem; }
+}

@@ -15,13 +15,25 @@
                 <a href="{{ route('dashboard') }}" class="nav-item">Dashboard</a>
                 <a href="{{ route('pesanan.index') }}" class="nav-item">Pesanan & Resi</a>
                 <a href="{{ route('pengiriman.index') }}" class="nav-item">Penjadwalan & Manifest</a>
+                <a href="{{ route('peta.index') }}" class="nav-item">Peta Armada (GPS)</a>
                 <a href="{{ route('kendaraan.index') }}" class="nav-item">Armada Kendaraan</a>
                 <a href="{{ route('karyawan.index') }}" class="nav-item">Sopir & Karyawan</a>
+                <a href="{{ route('absensi.index') }}" class="nav-item">Absensi</a>
                 <a href="{{ route('bbm.index') }}" class="nav-item">Pencatatan BBM</a>
                 <a href="{{ route('servis.index') }}" class="nav-item">Servis & Suku Cadang</a>
+                <a href="{{ route('verifikasi.index') }}" class="nav-item">Verifikasi Lapangan</a>
+                <a href="{{ route('penagihan.index') }}" class="nav-item">Penagihan & Invoice</a>
+                @if(Auth::user()->hasAnyRole(['admin_pusat', 'keuangan']))
+                <a href="{{ route('keuangan.index') }}" class="nav-item">Akuntansi & Keuangan</a>
+                <a href="{{ route('penggajian.index') }}" class="nav-item">Penggajian</a>
+                @endif
+                <a href="{{ route('laporan.operasional') }}" class="nav-item">Laporan Armada</a>
+                <a href="{{ route('pengumuman.index') }}" class="nav-item">Pengumuman</a>
+                <a href="{{ route('laporan.riwayat') }}" class="nav-item">Riwayat Perubahan</a>
                 @if(Auth::user()->hasRole('admin_pusat'))
                 <a href="{{ route('cabang.index') }}" class="nav-item">Data Cabang</a>
                 @endif
+                <a href="{{ route('password.ganti') }}" class="nav-item">Ganti Kata Sandi</a>
             </nav>
         </aside>
         <main class="main-content">

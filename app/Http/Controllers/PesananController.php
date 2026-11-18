@@ -50,16 +50,26 @@ class PesananController extends Controller
 
     public function show(Pesanan $pesanan)
     {
-        $pesanan->load(['cabang', 'pengiriman.kendaraan', 'pengiriman.sopir', 'statusLogs.user']);
-        return view('pesanan.show', compact('pesanan'));
+        $pesanan->load(['cabang', 'pengiriman.kendaraan', 'pengiriman.sopir', 'statusLogs.user', 'buktiPengirimans']);
+        $transisi = PesananService::transisiManual($pesanan->status);
+
+        return view('pesanan.show', compact('pesanan', 'transisi'));
     }
 
     public function updateStatus(Request $request, Pesanan $pesanan)
     {
         $validated = $request->validate([
             'status_baru' => 'required|string',
-            'catatan' => 'nullable|string',
+            'catatan' => 'nullable|string|max:500',
         ]);
+
+        // Transisi terjadwal/dalam_perjalanan/terkirim hanya lewat alur pengiriman.
+        $bolehManual = in_array($validated['status_baru'], PesananService::transisiManual($pesanan->status), true);
+        $koreksiPusat = in_array($pesanan->status, ['terkirim', 'dibatalkan'], true) && Auth::user()->hasRole('admin_pusat');
+
+        if (!$bolehManual && !$koreksiPusat) {
+            return back()->withErrors(['status_baru' => 'Perubahan status ini tidak dapat dilakukan dari halaman pesanan.']);
+        }
 
         try {
             $service = new PesananService();

@@ -83,4 +83,57 @@ class PengirimanController extends Controller
             return back()->withErrors(['aksi' => $e->getMessage()]);
         }
     }
+
+    public function batal(Request $request, Pengiriman $pengiriman)
+    {
+        $validated = $request->validate(['alasan' => 'required|string|max:300']);
+
+        try {
+            (new PengirimanService())->batal($pengiriman, $validated['alasan']);
+            return redirect()->route('pengiriman.show', $pengiriman)->with('success', 'Pengiriman dibatalkan; pesanan kembali menunggu jadwal.');
+        } catch (Exception $e) {
+            return back()->withErrors(['aksi' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Admin menandai pesanan terkirim; foto opsional, tanpa foto wajib catatan (A19).
+     */
+    public function terkirim(Request $request, Pengiriman $pengiriman, Pesanan $pesanan)
+    {
+        abort_unless((int) $pesanan->pengiriman_id === (int) $pengiriman->id, 404);
+
+        $validated = $request->validate([
+            'nama_penerima' => 'required|string|max:100',
+            'foto' => 'nullable|file|mimes:jpg,jpeg,png|mimetypes:image/jpeg,image/png|max:2048',
+            'catatan' => 'nullable|string|max:500',
+        ]);
+
+        try {
+            (new PengirimanService())->tandaiTerkirim(
+                $pesanan,
+                $validated['nama_penerima'],
+                $request->file('foto'),
+                $validated['catatan'] ?? null,
+                'admin'
+            );
+            return redirect()->route('pengiriman.show', $pengiriman)->with('success', "Pesanan {$pesanan->kode_resi} ditandai terkirim.");
+        } catch (Exception $e) {
+            return back()->withErrors(['aksi' => $e->getMessage()]);
+        }
+    }
+
+    public function gagal(Request $request, Pengiriman $pengiriman, Pesanan $pesanan)
+    {
+        abort_unless((int) $pesanan->pengiriman_id === (int) $pengiriman->id, 404);
+
+        $validated = $request->validate(['alasan' => 'required|string|max:300']);
+
+        try {
+            (new PengirimanService())->tandaiGagal($pesanan, $validated['alasan'], 'admin');
+            return redirect()->route('pengiriman.show', $pengiriman)->with('success', "Pesanan {$pesanan->kode_resi} ditandai gagal kirim.");
+        } catch (Exception $e) {
+            return back()->withErrors(['aksi' => $e->getMessage()]);
+        }
+    }
 }

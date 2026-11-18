@@ -21,6 +21,7 @@ class Karyawan extends Model
         'no_sim',
         'jenis_sim',
         'sim_berlaku_sampai',
+        'no_rekening',
         'aktif',
     ];
 
@@ -28,6 +29,7 @@ class Karyawan extends Model
     {
         return [
             'no_sim' => 'encrypted',
+            'no_rekening' => 'encrypted',
             'sim_berlaku_sampai' => 'date',
             'aktif' => 'boolean',
         ];

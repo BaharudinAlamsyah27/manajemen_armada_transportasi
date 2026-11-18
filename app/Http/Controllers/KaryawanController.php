@@ -4,15 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Cabang;
 use App\Models\Karyawan;
+use App\Models\User;
 use App\Services\NomorDokumenService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class KaryawanController extends Controller
 {
     public function index()
     {
-        $karyawans = Karyawan::with('cabang')->orderBy('kode')->get();
+        $karyawans = Karyawan::with(['cabang', 'user'])->orderBy('kode')->get();
         return view('karyawan.index', compact('karyawans'));
     }
 
@@ -78,10 +81,64 @@ class KaryawanController extends Controller
     {
         if ($karyawan->pengirimans()->exists()) {
             $karyawan->update(['aktif' => false]);
+            $karyawan->user?->update(['aktif' => false]);
             return redirect()->route('karyawan.index')->with('success', 'Karyawan memiliki riwayat pengiriman, status diubah menjadi nonaktif.');
         }
 
+        $karyawan->user?->update(['aktif' => false]);
         $karyawan->delete();
         return redirect()->route('karyawan.index')->with('success', 'Karyawan berhasil dihapus.');
+    }
+
+    /**
+     * Buat akun login portal untuk karyawan berjabatan sopir (MODUL-SOPIR-GPS 2).
+     * Kata sandi awal acak, ditampilkan sekali, wajib diganti saat login pertama.
+     */
+    public function buatAkun(Request $request, Karyawan $karyawan)
+    {
+        if ($karyawan->jabatan !== 'sopir') {
+            return back()->withErrors(['akun' => 'Akun portal hanya untuk karyawan berjabatan sopir.']);
+        }
+        if (!$karyawan->aktif) {
+            return back()->withErrors(['akun' => 'Karyawan nonaktif tidak dapat dibuatkan akun.']);
+        }
+        if ($karyawan->user) {
+            return back()->withErrors(['akun' => 'Karyawan ini sudah memiliki akun.']);
+        }
+
+        $validated = $request->validate([
+            'username' => 'required|string|min:4|max:30|alpha_dash|unique:users,username',
+        ]);
+
+        $passwordAwal = Str::password(10, symbols: false);
+
+        $user = User::create([
+            'name' => $karyawan->nama,
+            'username' => strtolower($validated['username']),
+            'password' => Hash::make($passwordAwal),
+            'cabang_id' => $karyawan->cabang_id,
+            'karyawan_id' => $karyawan->id,
+            'wajib_ganti_password' => true,
+            'aktif' => true,
+        ]);
+        $user->assignRole('sopir');
+
+        return back()->with('success', "Akun sopir dibuat. Username: {$user->username} — Kata sandi awal: {$passwordAwal} (catat sekarang, tidak ditampilkan lagi).");
+    }
+
+    public function resetPassword(Karyawan $karyawan)
+    {
+        $user = $karyawan->user;
+        if (!$user) {
+            return back()->withErrors(['akun' => 'Karyawan ini belum memiliki akun.']);
+        }
+
+        $passwordBaru = Str::password(10, symbols: false);
+        $user->update([
+            'password' => Hash::make($passwordBaru),
+            'wajib_ganti_password' => true,
+        ]);
+
+        return back()->with('success', "Kata sandi {$user->username} direset menjadi: {$passwordBaru} (wajib diganti saat login).");
     }
 }
