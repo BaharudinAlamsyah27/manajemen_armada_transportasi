@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AbsensiController;
+use App\Http\Controllers\AsetKasbonController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BbmController;
 use App\Http\Controllers\BerkasController;
@@ -18,14 +19,13 @@ use App\Http\Controllers\PengumumanController;
 use App\Http\Controllers\PesananController;
 use App\Http\Controllers\PetaArmadaController;
 use App\Http\Controllers\Portal\PortalController;
+use App\Http\Controllers\PublikController;
 use App\Http\Controllers\ServisController;
 use App\Http\Controllers\VerifikasiController;
 use App\Models\Pesanan;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return redirect()->route('login');
-});
+Route::get('/', [PublikController::class, 'index'])->name('publik.beranda');
 
 // Pelacakan publik (tanpa login): hanya status, kota, dan waktu — tanpa data pribadi atau koordinat GPS.
 Route::get('/lacak/{kode_resi}', function (string $kode_resi) {
@@ -60,8 +60,10 @@ Route::middleware(['auth', 'aktif', 'ganti.password'])->group(function () {
 
         Route::resource('pesanan', PesananController::class)->only(['index', 'create', 'store', 'show']);
         Route::post('/pesanan/{pesanan}/status', [PesananController::class, 'updateStatus'])->name('pesanan.status');
+        Route::get('/pesanan/{pesanan}/resi-pdf', [PesananController::class, 'cetakResi'])->name('pesanan.resi.pdf');
 
         Route::resource('pengiriman', PengirimanController::class)->only(['index', 'create', 'store', 'show']);
+        Route::get('/pengiriman/{pengiriman}/surat-jalan-pdf', [PengirimanController::class, 'cetakSuratJalan'])->name('pengiriman.surat-jalan.pdf');
         Route::post('/pengiriman/{pengiriman}/mulai', [PengirimanController::class, 'mulai'])->name('pengiriman.mulai');
         Route::post('/pengiriman/{pengiriman}/selesai', [PengirimanController::class, 'selesai'])->name('pengiriman.selesai');
         Route::post('/pengiriman/{pengiriman}/batal', [PengirimanController::class, 'batal'])->name('pengiriman.batal');
@@ -111,6 +113,12 @@ Route::middleware(['auth', 'aktif', 'ganti.password'])->group(function () {
             Route::post('/penggajian/hitung', [PenggajianController::class, 'hitung'])->name('penggajian.hitung');
             Route::post('/penggajian/{periode}/setujui', [PenggajianController::class, 'setujui'])->name('penggajian.setujui');
             Route::post('/penggajian/{periode}/bayar', [PenggajianController::class, 'bayar'])->name('penggajian.bayar');
+
+            Route::get('/aset-kasbon', [AsetKasbonController::class, 'index'])->name('aset.index');
+            Route::post('/aset-kasbon/aset', [AsetKasbonController::class, 'storeAset'])->name('aset.store');
+            Route::post('/aset-kasbon/penyusutan', [AsetKasbonController::class, 'jalankanPenyusutan'])->name('aset.penyusutan');
+            Route::post('/aset-kasbon/kasbon', [AsetKasbonController::class, 'storeKasbon'])->name('kasbon.store');
+            Route::post('/aset-kasbon/tagihan-pemasok', [AsetKasbonController::class, 'storeTagihanPemasok'])->name('tagihan-pemasok.store');
         });
 
         // Fase 15, 16, 17 — Peta GPS, Laporan Operasional & Riwayat Perubahan

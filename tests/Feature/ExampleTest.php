@@ -21,7 +21,7 @@ class ExampleTest extends TestCase
 
     public function test_login_page_and_root_redirect_work(): void
     {
-        $this->get('/')->assertRedirect('/login');
+        $this->get('/')->assertStatus(200)->assertSee('FleetFlow Logistics');
         $this->get('/login')->assertStatus(200);
     }
 

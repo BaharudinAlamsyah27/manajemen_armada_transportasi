@@ -7,14 +7,23 @@ use App\Models\Kendaraan;
 use App\Models\Pengiriman;
 use App\Models\Pesanan;
 use App\Services\PengirimanService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
 use Illuminate\Http\Request;
 
 class PengirimanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $pengirimans = Pengiriman::with(['cabang', 'kendaraan', 'sopir', 'pesanans'])->latest()->get();
+        $query = Pengiriman::with(['cabang', 'kendaraan', 'sopir', 'pesanans']);
+        if ($request->filled('q')) {
+            $q = $request->input('q');
+            $query->where('kode', 'like', "%{$q}%");
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+        $pengirimans = $query->latest()->get();
         return view('pengiriman.index', compact('pengirimans'));
     }
 
@@ -135,5 +144,13 @@ class PengirimanController extends Controller
         } catch (Exception $e) {
             return back()->withErrors(['aksi' => $e->getMessage()]);
         }
+    }
+
+    public function cetakSuratJalan(Pengiriman $pengiriman)
+    {
+        $pengiriman->load(['cabang', 'kendaraan', 'sopir', 'pesanans']);
+        $pdf = Pdf::loadView('pengiriman.surat-jalan-pdf', compact('pengiriman'));
+
+        return $pdf->download("SuratJalan-{$pengiriman->kode}.pdf");
     }
 }

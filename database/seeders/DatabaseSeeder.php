@@ -30,9 +30,30 @@ class DatabaseSeeder extends Seeder
         $roleSopir = Role::create(['name' => 'sopir']);
 
         // Cabang
-        $cabang1 = Cabang::create(['kode' => 'JKT', 'nama' => 'Cabang Jakarta', 'kota' => 'Jakarta', 'aktif' => true]);
-        $cabang2 = Cabang::create(['kode' => 'BDG', 'nama' => 'Cabang Bandung', 'kota' => 'Bandung', 'aktif' => true]);
-        $cabang3 = Cabang::create(['kode' => 'SBY', 'nama' => 'Cabang Surabaya', 'kota' => 'Surabaya', 'aktif' => true]);
+        $cabang1 = Cabang::create([
+            'kode' => 'JKT',
+            'nama' => 'Cabang Jakarta',
+            'kota' => 'Jakarta',
+            'alamat' => 'Jl. Jend. Sudirman Kav. 45, Jakarta Selatan',
+            'no_hp' => '021-5008891',
+            'aktif' => true,
+        ]);
+        $cabang2 = Cabang::create([
+            'kode' => 'BDG',
+            'nama' => 'Cabang Bandung',
+            'kota' => 'Bandung',
+            'alamat' => 'Jl. Soekarno Hatta No. 210, Kota Bandung',
+            'no_hp' => '022-7308892',
+            'aktif' => true,
+        ]);
+        $cabang3 = Cabang::create([
+            'kode' => 'SBY',
+            'nama' => 'Cabang Surabaya',
+            'kota' => 'Surabaya',
+            'alamat' => 'Jl. Ahmad Yani No. 88, Kota Surabaya',
+            'no_hp' => '031-8208893',
+            'aktif' => true,
+        ]);
 
         // Pengguna Pusat
         $userPusat = User::create([
@@ -211,8 +232,168 @@ class DatabaseSeeder extends Seeder
         KomponenGaji::create(['kode' => 'RITASE', 'nama' => 'Uang Jalan / Ritase', 'jenis' => 'pendapatan', 'tipe_hitung' => 'per_ritase', 'nominal_default' => 100000, 'akun_id' => $akunRitase?->id]);
 
         // Master Pelanggan, Tarif & Pemasok Contoh
-        Pelanggan::create(['kode' => 'PLG-001', 'nama' => 'PT Nusantara Logistik', 'alamat' => 'Jl. Jend. Sudirman', 'kontak' => 'Budi', 'no_hp' => '08123456001', 'termin_hari' => 14]);
+        $pelanggan1 = Pelanggan::create(['kode' => 'PLG-001', 'nama' => 'PT Nusantara Logistik', 'alamat' => 'Jl. Jend. Sudirman', 'kontak' => 'Budi', 'no_hp' => '08123456001', 'termin_hari' => 14]);
         Tarif::create(['kota_asal' => 'Jakarta', 'kota_tujuan' => 'Bandung', 'harga_per_kg' => 4500, 'tarif_minimum' => 50000, 'berlaku_sejak' => now()->toDateString()]);
+        Tarif::create(['kota_asal' => 'Jakarta', 'kota_tujuan' => 'Surabaya', 'harga_per_kg' => 8500, 'tarif_minimum' => 100000, 'berlaku_sejak' => now()->toDateString()]);
         Pemasok::create(['kode' => 'PMS-001', 'nama' => 'Bengkel Mitra Armada', 'jenis' => 'bengkel', 'kontak' => '021-5551234', 'termin_hari' => 14]);
+
+        // Data Transaksi Demo (hanya saat bukan menjalankan PHPUnit agar grafik & dashboard langsung terisi)
+        if (!app()->runningUnitTests()) {
+            $kndJkt = Kendaraan::withoutGlobalScopes()->where('cabang_id', $cabang1->id)->first();
+            $sopirJkt = Karyawan::withoutGlobalScopes()->where('cabang_id', $cabang1->id)->where('jabatan', 'sopir')->first();
+
+            if ($kndJkt && $sopirJkt) {
+                \Illuminate\Support\Facades\Auth::login($userPusat);
+                $pesananSvc = new \App\Services\PesananService();
+                $pengirimanSvc = new \App\Services\PengirimanService();
+
+                // 1. Pesanan & Pengiriman Selesai (2 hari lalu)
+                $psSelesai = $pesananSvc->createPesanan([
+                    'cabang_id' => $cabang1->id,
+                    'pelanggan_id' => $pelanggan1->id,
+                    'kode_resi' => 'FFDEMO000001',
+                    'tanggal_pesan' => now()->subDays(2)->toDateString(),
+                    'nama_pengirim' => 'PT Nusantara Logistik',
+                    'no_hp_pengirim' => '08123456001',
+                    'alamat_asal' => 'Kawasan Industri Pulogadung, Jakarta',
+                    'kota_asal' => 'Jakarta',
+                    'nama_penerima' => 'Gudang Distribusi Bandung',
+                    'no_hp_penerima' => '081299998888',
+                    'alamat_tujuan' => 'Jl. Soekarno Hatta No. 120, Bandung',
+                    'kota_tujuan' => 'Bandung',
+                    'deskripsi_barang' => ' Elektronik & Suku Cadang (20 Box)',
+                    'berat_kg' => 250,
+                    'jumlah_koli' => 20,
+                    'tarif' => 1125000,
+                ]);
+
+                $m1 = $pengirimanSvc->createManifest([
+                    'tanggal_rencana' => now()->subDays(2)->toDateString(),
+                    'kendaraan_id' => $kndJkt->id,
+                    'sopir_id' => $sopirJkt->id,
+                    'waktu_mulai_rencana' => now()->subDays(2)->setTime(8, 0),
+                    'estimasi_tiba' => now()->subDays(2)->setTime(13, 0),
+                ], [$psSelesai->id]);
+                $pengirimanSvc->mulaiPerjalanan($m1, 1000);
+                $pengirimanSvc->tandaiTerkirim($psSelesai->fresh(), 'Hendra (Kepala Gudang)', null, 'Barang lengkap & aman', 'admin');
+                $pengirimanSvc->selesaiPerjalanan($m1->fresh(), 1165);
+
+                // Terbitkan Invoice otomatis untuk pesanan selesai
+                (new \App\Services\PenagihanService())->buatInvoice($pelanggan1->id, [$psSelesai->id], 0, now()->subDay()->toDateString());
+
+                // 2. Pesanan & Pengiriman Aktif Hari Ini
+                $psAktif = $pesananSvc->createPesanan([
+                    'cabang_id' => $cabang1->id,
+                    'kode_resi' => 'FFDEMO000002',
+                    'tanggal_pesan' => now()->toDateString(),
+                    'nama_pengirim' => 'CV Sumber Makmur',
+                    'no_hp_pengirim' => '081311112222',
+                    'alamat_asal' => 'Jl. Daan Mogot KM 12, Jakarta Barat',
+                    'kota_asal' => 'Jakarta',
+                    'nama_penerima' => 'Toko Sentosa Jaya',
+                    'no_hp_penerima' => '081377776666',
+                    'alamat_tujuan' => 'Jl. Pasteur No. 45, Bandung',
+                    'kota_tujuan' => 'Bandung',
+                    'deskripsi_barang' => 'Bahan Tekstil (10 Roll)',
+                    'berat_kg' => 180,
+                    'jumlah_koli' => 10,
+                    'tarif' => 810000,
+                ]);
+                $pengirimanSvc->createManifest([
+                    'tanggal_rencana' => now()->toDateString(),
+                    'kendaraan_id' => $kndJkt->id,
+                    'sopir_id' => $sopirJkt->id,
+                ], [$psAktif->id]);
+
+                // 3. Pesanan Menunggu Jadwal
+                $pesananSvc->createPesanan([
+                    'cabang_id' => $cabang1->id,
+                    'kode_resi' => 'FFDEMO000003',
+                    'tanggal_pesan' => now()->toDateString(),
+                    'nama_pengirim' => 'PT Maju Bersama',
+                    'alamat_asal' => 'Tanjung Priok, Jakarta Utara',
+                    'kota_asal' => 'Jakarta',
+                    'nama_penerima' => 'PT Karya Mandiri',
+                    'no_hp_penerima' => '081500009999',
+                    'alamat_tujuan' => 'Kawasan Rungkut Industri, Surabaya',
+                    'kota_tujuan' => 'Surabaya',
+                    'deskripsi_barang' => 'Mesin Kompresor',
+                    'berat_kg' => 300,
+                    'jumlah_koli' => 3,
+                    'tarif' => 2550000,
+                ]);
+
+                // 4. Catatan BBM, Servis & Biaya Operasional Bulan Ini (untuk Grafik Biaya)
+                $bbm = \App\Models\BbmLog::create([
+                    'cabang_id' => $cabang1->id,
+                    'kendaraan_id' => $kndJkt->id,
+                    'sopir_id' => $sopirJkt->id,
+                    'tanggal' => now()->subDay()->toDateString(),
+                    'liter' => 35,
+                    'harga_per_liter' => 10000,
+                    'total' => 350000,
+                    'odometer' => 1180,
+                    'tangki_penuh' => true,
+                    'spbu' => 'SPBU Pertamina Rest Area KM 57',
+                    'dicatat_oleh' => $userPusat->id,
+                    'status_verifikasi' => 'terverifikasi',
+                ]);
+                (new \App\Services\JurnalOtomatisService())->catatBbmTerverifikasi($bbm);
+
+                $biayaTol = \App\Models\BiayaOperasional::create([
+                    'cabang_id' => $cabang1->id,
+                    'kendaraan_id' => $kndJkt->id,
+                    'pengiriman_id' => $m1->id,
+                    'jenis' => 'tol',
+                    'tanggal' => now()->subDays(2)->toDateString(),
+                    'jumlah' => 145000,
+                    'keterangan' => 'Tol Cipularang PP',
+                    'dicatat_oleh' => $userPusat->id,
+                    'status_verifikasi' => 'terverifikasi',
+                ]);
+                (new \App\Services\JurnalOtomatisService())->catatBiayaOperasional($biayaTol);
+
+                $servis = \App\Models\ServisKendaraan::create([
+                    'cabang_id' => $cabang1->id,
+                    'kendaraan_id' => $kndJkt->id,
+                    'jenis' => 'berkala',
+                    'status' => 'selesai',
+                    'tanggal_masuk' => now()->subDays(5)->toDateString(),
+                    'tanggal_selesai' => now()->subDays(5)->toDateString(),
+                    'odometer' => 980,
+                    'bengkel' => 'Bengkel Mitra Armada',
+                    'biaya_jasa' => 250000,
+                    'total_biaya' => 250000,
+                    'deskripsi' => 'Servis berkala & pengecekan rem',
+                ]);
+                (new \App\Services\JurnalOtomatisService())->catatServisSelesai($servis);
+
+                \App\Models\AsetTetap::create([
+                    'cabang_id' => $cabang1->id,
+                    'kendaraan_id' => $kndJkt->id,
+                    'nama' => 'Mitsubishi Colt Diesel Box ' . $kndJkt->plat_nomor,
+                    'tanggal_perolehan' => now()->subMonths(12)->toDateString(),
+                    'harga_perolehan' => 280000000,
+                    'nilai_residu' => 40000000,
+                    'umur_bulan' => 60,
+                    'metode' => 'garis_lurus',
+                    'akumulasi_penyusutan' => 4000000,
+                    'status' => 'aktif',
+                ]);
+
+                \App\Models\Pengumuman::create([
+                    'cabang_id' => null,
+                    'judul' => 'SOP Pemeriksaan Kendaraan Sebelum Berangkat',
+                    'isi' => 'Seluruh sopir wajib memeriksa tekanan ban, oli, air radiator, dan memastikan STNK/KIR aktif sebelum memulai perjalanan di aplikasi portal.',
+                    'kategori' => 'keselamatan',
+                    'target_peran' => ['sopir', 'admin_cabang'],
+                    'disematkan' => true,
+                    'terbit_pada' => now()->toDateString(),
+                    'dibuat_oleh' => $userPusat->id,
+                ]);
+
+                \Illuminate\Support\Facades\Auth::logout();
+            }
+        }
     }
 }

@@ -2,7 +2,10 @@
 @section('content')
 <div class="page-header">
     <h2>Detail Manifest: {{ $pengiriman->kode }}</h2>
-    <a href="{{ route('pengiriman.index') }}" class="btn btn-sm">Kembali</a>
+    <div style="display:flex; gap:0.5rem;">
+        <a href="{{ route('pengiriman.surat-jalan.pdf', $pengiriman) }}" class="btn btn-sm" style="background:#0F766E;">Cetak Surat Jalan (PDF)</a>
+        <a href="{{ route('pengiriman.index') }}" class="btn btn-sm">Kembali</a>
+    </div>
 </div>
 
 <div class="grid-cards" style="margin-bottom:1.5rem;">

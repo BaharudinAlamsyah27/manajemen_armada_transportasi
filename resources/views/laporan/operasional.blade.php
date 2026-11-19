@@ -7,6 +7,7 @@
         <span>s/d</span>
         <input type="date" name="sampai" value="{{ $sampai }}" class="form-input" style="width:auto;">
         <button type="submit" class="btn btn-sm" style="width:auto;">Filter</button>
+        <a href="{{ route('laporan.operasional', ['dari' => $dari, 'sampai' => $sampai, 'export' => 'csv']) }}" class="btn btn-sm" style="width:auto; background:#0F766E;">Ekspor CSV</a>
     </form>
 </div>
 

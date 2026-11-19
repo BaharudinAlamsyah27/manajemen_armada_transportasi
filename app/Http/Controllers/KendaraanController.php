@@ -10,10 +10,32 @@ use Illuminate\Support\Facades\Auth;
 
 class KendaraanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $kendaraans = Kendaraan::with('cabang')->orderBy('kode')->get();
-        return view('kendaraan.index', compact('kendaraans'));
+        $query = Kendaraan::with('cabang');
+
+        if ($request->filled('q')) {
+            $q = $request->input('q');
+            $query->where(function ($sub) use ($q) {
+                $sub->where('plat_nomor', 'like', "%{$q}%")
+                    ->orWhere('kode', 'like', "%{$q}%")
+                    ->orWhere('merk', 'like', "%{$q}%");
+            });
+        }
+        if ($request->filled('jenis')) {
+            $query->where('jenis', $request->input('jenis'));
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+        if ($request->filled('cabang_id') && Auth::user()->hasAnyRole(['admin_pusat', 'keuangan'])) {
+            $query->where('cabang_id', $request->input('cabang_id'));
+        }
+
+        $kendaraans = $query->orderBy('kode')->get();
+        $cabangs = Cabang::where('aktif', true)->orderBy('nama')->get();
+
+        return view('kendaraan.index', compact('kendaraans', 'cabangs'));
     }
 
     public function create()

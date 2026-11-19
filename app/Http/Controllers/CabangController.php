@@ -7,9 +7,18 @@ use Illuminate\Http\Request;
 
 class CabangController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $cabangs = Cabang::orderBy('kode')->get();
+        $query = Cabang::withCount(['kendaraans', 'karyawans']);
+        if ($request->filled('q')) {
+            $q = $request->input('q');
+            $query->where(function ($sub) use ($q) {
+                $sub->where('nama', 'like', "%{$q}%")
+                    ->orWhere('kode', 'like', "%{$q}%")
+                    ->orWhere('kota', 'like', "%{$q}%");
+            });
+        }
+        $cabangs = $query->orderBy('kode')->get();
         return view('cabang.index', compact('cabangs'));
     }
 

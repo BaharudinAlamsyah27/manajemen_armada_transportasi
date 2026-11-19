@@ -2,7 +2,10 @@
 @section('content')
 <div class="page-header">
     <h2>Detail Pesanan: {{ $pesanan->kode_resi }}</h2>
-    <a href="{{ route('pesanan.index') }}" class="btn btn-sm">Kembali</a>
+    <div style="display:flex; gap:0.5rem;">
+        <a href="{{ route('pesanan.resi.pdf', $pesanan) }}" class="btn btn-sm" style="background:#0F766E;">Cetak Label Resi (PDF)</a>
+        <a href="{{ route('pesanan.index') }}" class="btn btn-sm">Kembali</a>
+    </div>
 </div>
 
 <div class="grid-cards" style="margin-bottom:1.5rem;">

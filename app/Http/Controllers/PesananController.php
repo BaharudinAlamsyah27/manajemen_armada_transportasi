@@ -5,15 +5,29 @@ namespace App\Http\Controllers;
 use App\Models\Cabang;
 use App\Models\Pesanan;
 use App\Services\PesananService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class PesananController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $pesanans = Pesanan::with(['cabang', 'pengiriman'])->latest()->get();
+        $query = Pesanan::with(['cabang', 'pengiriman']);
+        if ($request->filled('q')) {
+            $q = $request->input('q');
+            $query->where(function ($sub) use ($q) {
+                $sub->where('kode_resi', 'like', "%{$q}%")
+                    ->orWhere('nama_pengirim', 'like', "%{$q}%")
+                    ->orWhere('nama_penerima', 'like', "%{$q}%")
+                    ->orWhere('kota_tujuan', 'like', "%{$q}%");
+            });
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+        $pesanans = $query->latest()->get();
         return view('pesanan.index', compact('pesanans'));
     }
 
@@ -78,5 +92,14 @@ class PesananController extends Controller
         } catch (Exception $e) {
             return back()->withErrors(['status_baru' => $e->getMessage()]);
         }
+    }
+
+    public function cetakResi(Pesanan $pesanan)
+    {
+        $pesanan->load('cabang');
+        $urlLacak = route('lacak.publik', $pesanan->kode_resi);
+        $pdf = Pdf::loadView('pesanan.resi-pdf', compact('pesanan', 'urlLacak'));
+
+        return $pdf->download("Resi-{$pesanan->kode_resi}.pdf");
     }
 }

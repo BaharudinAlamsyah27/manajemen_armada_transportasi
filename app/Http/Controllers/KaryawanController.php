@@ -13,10 +13,28 @@ use Illuminate\Support\Str;
 
 class KaryawanController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $karyawans = Karyawan::with(['cabang', 'user'])->orderBy('kode')->get();
-        return view('karyawan.index', compact('karyawans'));
+        $query = Karyawan::with(['cabang', 'user']);
+
+        if ($request->filled('q')) {
+            $q = $request->input('q');
+            $query->where(function ($sub) use ($q) {
+                $sub->where('nama', 'like', "%{$q}%")
+                    ->orWhere('kode', 'like', "%{$q}%");
+            });
+        }
+        if ($request->filled('jabatan')) {
+            $query->where('jabatan', $request->input('jabatan'));
+        }
+        if ($request->filled('cabang_id') && Auth::user()->hasAnyRole(['admin_pusat', 'keuangan'])) {
+            $query->where('cabang_id', $request->input('cabang_id'));
+        }
+
+        $karyawans = $query->orderBy('kode')->get();
+        $cabangs = Cabang::where('aktif', true)->orderBy('nama')->get();
+
+        return view('karyawan.index', compact('karyawans', 'cabangs'));
     }
 
     public function create()

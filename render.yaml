@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: fleetflow-erp
+    runtime: docker
+    plan: free
+    envVars:
+      - key: APP_NAME
+        value: FleetFlow
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_DEMO
+        value: "true"
+      - key: APP_TIMEZONE
+        value: Asia/Jakarta
+      - key: APP_LOCALE
+        value: id
+      - key: DB_CONNECTION
+        value: sqlite
+      - key: SESSION_DRIVER
+        value: file
+      - key: CACHE_STORE
+        value: file
+      - key: APP_KEY
+        generateValue: false
+        sync: false
